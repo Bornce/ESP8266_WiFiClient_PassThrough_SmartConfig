@@ -192,11 +192,6 @@ void setup()
   char SSID_Name[100]={0};
   char STAPSK_Name[100]={0};  
 
-
-
-
-
-
   Serial.begin(115200);
   Serial.flush();
   
@@ -208,7 +203,7 @@ void setup()
   
   if(EEPROM.read(0)==0)
   {
-	  Serial.print("进入Smart模式");
+	  Serial.print("Go to Smart Mode");
     smartConfig();
   }
   //
