@@ -42,6 +42,8 @@
 
 #define LED2  2
 
+#define SSID_BEGIN_ADDR   100
+#define STAPSK_BEGIN_ADDR 200
 
 /*
  * struct
@@ -85,47 +87,86 @@ void staticBlink()
 }
 //
 
+
 void EEPROM_Clear(void)
 {
   int i=0;
-  for(i=0;i<200;i++)
+  EEPROM.begin(4096);
+  
+  for(i=SSID_BEGIN_ADDR;i<SSID_BEGIN_ADDR+200;i++)
   {
-    EEPROM.write(i, 0);
+    EEPROM.write(SSID_BEGIN_ADDR, 0);
   }
   //
+  EEPROM.end();
 }
 //
 
 void EEPROM_Save(char * SSID_Name,char * STAPSK_Name)
 {
   int i=0;
-  for(i=0;i<strlen(SSID_Name);i++)
+  EEPROM_Clear();
+  
+  EEPROM.begin(4096);
+  
+  for(i=SSID_BEGIN_ADDR;i<SSID_BEGIN_ADDR+strlen(SSID_Name);i++)
   {
-    EEPROM.write(i, *(SSID_Name+i));
+    EEPROM.write(i, *(SSID_Name+i-SSID_BEGIN_ADDR));
+  }
+  //
+  for(i=SSID_BEGIN_ADDR+strlen(SSID_Name);i<STAPSK_BEGIN_ADDR;i++)
+  {
+    EEPROM.write(i,0);
+   }
+   //
+
+    
+
+  for(i=STAPSK_BEGIN_ADDR;i<STAPSK_BEGIN_ADDR+strlen(STAPSK_Name);i++)
+  {
+    EEPROM.write(i, *(STAPSK_Name+i-STAPSK_BEGIN_ADDR));
   }
   //
 
-  for(i=100;i<100+strlen(STAPSK_Name);i++)
+  for(i=STAPSK_BEGIN_ADDR+strlen(STAPSK_Name);i<STAPSK_BEGIN_ADDR+100;i++)
   {
-    EEPROM.write(i, *(STAPSK_Name+i));
+    EEPROM.write(i,0);
   }
   //
+
+  EEPROM.end();
+
+  EEPROM.begin(4096);
+
+  Serial.printf("The Data in Flash:");
+  for(i=SSID_BEGIN_ADDR;i<SSID_BEGIN_ADDR+200;i++)
+  {
+    Serial.printf("%c",EEPROM.read(i));
+  }
+  //
+    
+
   
 }
 //
 
+
+
+
 void EEPROM_Read(char * SSID_Name,char * STAPSK_Name)
 {
   int i=0;
-  for(i=0;i<100;i++)
+
+  EEPROM.begin(4096);
+  for(i=SSID_BEGIN_ADDR;i<SSID_BEGIN_ADDR+100;i++)
   {
-    *(SSID_Name+i)	=	EEPROM.read(i);
+    *(SSID_Name+i-SSID_BEGIN_ADDR)  = EEPROM.read(i);
   }
   //
 
-  for(i=100;i<200;i++)
+  for(i=STAPSK_BEGIN_ADDR;i<STAPSK_BEGIN_ADDR+100;i++)
   {
-    *(STAPSK_Name+i-100)	=	EEPROM.read(i);
+    *(STAPSK_Name+i-STAPSK_BEGIN_ADDR)  = EEPROM.read(i);
   }
   //
   
@@ -158,8 +199,8 @@ void smartConfig()
 
     if (WiFi.smartConfigDone())
     {
-      char *SSID_Name;
-      char *STAPSK_Name;
+      char SSID_name[100]={0};
+      char STAPSK_name[100]={0};
       waitRebootCount = 0;
       WiFi.setAutoConnect(true);  // 设置自动连接
       
@@ -167,10 +208,14 @@ void smartConfig()
       Serial.printf("PSW:%s\r\n", WiFi.psk().c_str());
 
 
-      SSID_Name = (char *)(WiFi.SSID().c_str());
-      STAPSK_Name = (char *)(WiFi.psk().c_str());
-      
-      EEPROM_Save(SSID_Name,STAPSK_Name);
+
+      sprintf(SSID_name,"%s",WiFi.SSID().c_str());
+      sprintf(STAPSK_name,"%s",WiFi.psk().c_str());
+
+      Serial.printf("SAVED SSID:%s\r\n",SSID_name);
+      Serial.printf("SAVED PSW:%s\r\n",STAPSK_name);
+            
+      EEPROM_Save(SSID_name,STAPSK_name);
 
       
       break;
@@ -195,13 +240,14 @@ void setup()
   Serial.begin(115200);
   Serial.flush();
   
-  delay(1000);
+  delay(5000);
 
   pinMode(LED2, OUTPUT);
   staticTicker.attach_ms(2000, staticBlink);
 
+  EEPROM.begin(4096);
   
-  if(EEPROM.read(0)==0)
+  if(EEPROM.read(SSID_BEGIN_ADDR)==0)
   {
 	  Serial.print("Go to Smart Mode");
     smartConfig();
@@ -214,10 +260,11 @@ void setup()
 	WiFi.mode(WIFI_STA);
 	//WiFi.begin(ssid);
 	WiFi.begin(SSID_Name, STAPSK_Name);
-	
-	Serial.print("保存的账号密码");
-	Serial.print("SSID_Name is"); Serial.print(SSID_Name);
-	Serial.print("STAPSK_Name is"); Serial.print(STAPSK_Name);
+
+  
+//	Serial.println("UID&KEY INF:");
+//	Serial.print("SSID_Name is"); Serial.println(SSID_Name);
+//	Serial.print("STAPSK_Name is"); Serial.println(STAPSK_Name);
 	
 	while (WiFi.status() != WL_CONNECTED) 
 	{
@@ -246,7 +293,7 @@ void setup()
   }
   //
 
-
+  Serial.flush();
   
   delay(5000);
 }
@@ -296,13 +343,11 @@ void loop()
       
       if(WiFi.status() != WL_CONNECTED)
       {
-        Serial.print("WIFI DISCONNECTED....");
         ESP.restart();
       }
       //
       if(!client.connected())
       {
-        Serial.print("NET DISCONNECTED....");
         client.connect(host, port);
       }
       //
@@ -321,8 +366,9 @@ void serial_read()
   int lenOfUartRevTemp = 0;
   int index = 0;
   
-  char RestoreFactoryDefaults[]="RestoreFactoryDefaults_YueDian";
-
+//  char RestoreFactoryDefaults[]="RestoreFactoryDefaults_YueDian";
+  char RestoreFactoryDefaults[]="ReFDYD";
+  char  RebootCmd[]="Reboot";
   
   if (Serial.available()>0) 
   {
@@ -348,14 +394,17 @@ void serial_read()
     //
 
 
-	if(!strncmp((char *)UartGet,(char *)RestoreFactoryDefaults,sizeof(RestoreFactoryDefaults)))
+	if(!strncmp((char *)UartGet,(char *)RestoreFactoryDefaults,sizeof(RestoreFactoryDefaults)-1))
 	{
-    Serial.print("Get Reboot CMD\r\n");
 		EEPROM_Clear();
 		ESP.restart();
 	}
 	//
-
+  if(!strncmp((char *)UartGet,(char *)RebootCmd,sizeof(RebootCmd)-1))
+  {
+    ESP.restart();
+  }
+  //
     
 //	Serial.write(&UartGet[0],lenOfUartRevTemp);
 	client.write(&UartGet[0],lenOfUartRevTemp);
@@ -372,6 +421,8 @@ void server_read()
 	int index = 0;
 	static  int countOfNotGetDataFromServer = 0;
 
+  char RestoreFactoryDefaults[]="ReFDYD";
+  char  RebootCmd[]="Reboot";
   
 	if(client.available()>0)
 	{
@@ -387,14 +438,27 @@ void server_read()
 		}
 		//
 		
-		
+		memset(WifiGet,0,sizeof(WifiGet));
 		while(lenOfSeverRev--)
 		{
 			WifiGet[index]	=	client.read();
 			index++;
 		}
 		//
-		
+
+  if(!strncmp((char *)WifiGet,(char *)RestoreFactoryDefaults,sizeof(RestoreFactoryDefaults)-1))
+  {
+    EEPROM_Clear();
+    ESP.restart();
+  }
+  //
+  if(!strncmp((char *)WifiGet,(char *)RebootCmd,sizeof(RebootCmd)-1))
+  {
+    ESP.restart();
+  }
+  //
+
+    
 		Serial.write(&WifiGet[0],lenOfSeverRevTemp);
 	}
 	//
