@@ -10,6 +10,7 @@
 */
 
 
+
 /*
  * *********include
 */
@@ -191,6 +192,11 @@ void setup()
   char SSID_Name[100]={0};
   char STAPSK_Name[100]={0};  
 
+
+
+
+
+
   Serial.begin(115200);
   Serial.flush();
   
@@ -292,6 +298,19 @@ void loop()
   		serial_read();
       delay(1);
   		server_read();
+      
+      if(WiFi.status() != WL_CONNECTED)
+      {
+        Serial.print("WIFI DISCONNECTED....");
+        ESP.restart();
+      }
+      //
+      if(!client.connected())
+      {
+        Serial.print("NET DISCONNECTED....");
+        client.connect(host, port);
+      }
+      //
   	}
   	//
     
@@ -320,24 +339,28 @@ void serial_read()
     if (lenOfUartRev > 512) 
     {
       lenOfUartRev = 512;
-	  lenOfUartRevTemp	=	512;
+	    lenOfUartRevTemp	=	512;
     }
     //
 
-      
+    memset(UartGet,0,sizeof(UartGet));
+    
     while(lenOfUartRev--) 
     {
       UartGet[index] = Serial.read();
       index ++;
     }
     //
-	
-	if(!strncmp(UartGet,RestoreFactoryDefaults,sizeof(RestoreFactoryDefaults)))
+
+
+	if(!strncmp((char *)UartGet,(char *)RestoreFactoryDefaults,sizeof(RestoreFactoryDefaults)))
 	{
-		EEPROM.write(0, 0);
+    Serial.print("Get Reboot CMD\r\n");
+		EEPROM_Clear();
 		ESP.restart();
 	}
 	//
+
     
 //	Serial.write(&UartGet[0],lenOfUartRevTemp);
 	client.write(&UartGet[0],lenOfUartRevTemp);
